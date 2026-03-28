@@ -31,6 +31,14 @@ def sync_linkedin_jobs():
     return success_response(result, status=status)
 
 
+@job_aggregation_bp.get("/linkedin/poll/<provider_run_id>")
+def poll_linkedin_run(provider_run_id: str):
+    target_role = request.args.get("target_role", "")
+    linkedin_url = request.args.get("linkedin_url", "")
+    result = service.poll_linkedin_run(provider_run_id, target_role, linkedin_url)
+    return success_response(result)
+
+
 @job_aggregation_bp.get("/metrics")
 def fetch_ingestion_metrics():
     payload = validate_payload(JobAggregationMetricsQuery, request.args.to_dict())

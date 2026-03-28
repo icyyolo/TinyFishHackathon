@@ -1,18 +1,24 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { DOMAIN_OPTIONS, ENVIRONMENT_OPTIONS, DEFAULT_SKILLS } from '../data/catalog'
 import {
   Layers, ClipboardList, BarChart3, Code2, Palette, TrendingUp, Brain,
-  Home, RefreshCw, Building2, Check, X, Sparkles, ChevronRight, Link2,
+  Home, RefreshCw, Building2, Check, X, Sparkles, ChevronRight,
+  Briefcase, FileText, MessageSquare,
 } from 'lucide-react'
 
-const DOMAIN_ICONS = { ClipboardList, BarChart3, Code2, Palette, TrendingUp, Brain }
-const ENV_ICONS = { Home, RefreshCw, Building2 }
+const ICON_SETS = {
+  domain: { ClipboardList, BarChart3, Code2, Palette, TrendingUp, Brain },
+  environment: { Home, RefreshCw, Building2 },
+  env: { Home, RefreshCw, Building2 },
+}
 
-const STEPS = [
-  { id: 'domain', question: 'What domain are you targeting?', sub: 'Choose the field that excites you most.' },
-  { id: 'env', question: 'Where do you want to work?', sub: 'Pick your ideal work environment.' },
-  { id: 'skills', question: 'What are your key skills?', sub: 'Add the skills you bring to the table, and optionally link a LinkedIn jobs search.' },
+const FALLBACK_STEPS = [
+  { id: 'domain', type: 'select', question: 'What domain are you targeting?', sub: 'Choose the field that excites you most.', iconSet: 'domain', options: DOMAIN_OPTIONS },
+  { id: 'environment', type: 'select', question: 'Where do you want to work?', sub: 'Pick your ideal work environment.', iconSet: 'environment', options: ENVIRONMENT_OPTIONS },
+  { id: 'job_types', type: 'multi_select', multiple: true, question: 'What job types are you open to?', sub: 'Select one or more preferences.', options: [{ id: 'full_time', label: 'Full-time' }, { id: 'contract', label: 'Contract' }, { id: 'internship', label: 'Internship' }] },
+  { id: 'skills', type: 'tags', question: 'What are your key skills?', sub: 'Add the skills you bring to the table.', defaults: DEFAULT_SKILLS },
+  { id: 'motivation', type: 'text', question: 'What type of projects do you enjoy the most?', sub: 'This helps personalize recommendation explanations.' },
 ]
 
 function OceanBg() {
@@ -36,10 +42,8 @@ function OceanBg() {
           key={i}
           className="absolute rounded-full"
           style={{
-            left: `${p.x}%`,
-            top: `${p.y}%`,
-            width: p.size,
-            height: p.size,
+            left: `${p.x}%`, top: `${p.y}%`,
+            width: p.size, height: p.size,
             background: `rgba(0, 255, 213, ${0.05 + Math.random() * 0.1})`,
           }}
           animate={{ y: [0, -20, 0], opacity: [0.1, 0.4, 0.1] }}
@@ -104,33 +108,239 @@ function SkillTag({ skill, onRemove }) {
   )
 }
 
+/* ─── Step indicator with numbered circles and connector lines ─── */
+function StepIndicators({ steps, currentStep }) {
+  const STEP_ICONS = { domain: Briefcase, environment: Home, job_types: FileText, skills: Code2, motivation: MessageSquare }
+  return (
+    <div className="flex items-center justify-center gap-0">
+      {steps.map((s, i) => {
+        const done = i < currentStep
+        const active = i === currentStep
+        const Icon = STEP_ICONS[s.id]
+        return (
+          <div key={s.id} className="flex items-center">
+            <div className="flex flex-col items-center gap-1.5">
+              <div
+                className="relative w-8 h-8 rounded-full flex items-center justify-center transition-all duration-400"
+                style={{
+                  background: done ? 'linear-gradient(135deg, #00ffd5, #22d3ee)' : active ? 'rgba(0,255,213,0.12)' : 'rgba(255,255,255,0.05)',
+                  border: active ? '2px solid #00ffd5' : done ? '2px solid transparent' : '2px solid rgba(255,255,255,0.12)',
+                  boxShadow: active ? '0 0 16px rgba(0,255,213,0.35)' : 'none',
+                }}
+              >
+                {done ? (
+                  <Check className="w-3.5 h-3.5 text-slate-900" strokeWidth={3} />
+                ) : Icon ? (
+                  <Icon className={`w-3.5 h-3.5 ${active ? 'text-cyan-300' : 'text-white/25'}`} strokeWidth={2} />
+                ) : (
+                  <span className={`text-xs font-bold ${active ? 'text-cyan-300' : 'text-white/25'}`}>{i + 1}</span>
+                )}
+              </div>
+              <span className={`text-[10px] font-semibold uppercase tracking-widest transition-colors duration-300 whitespace-nowrap ${
+                active ? 'text-cyan-300/70' : done ? 'text-white/40' : 'text-white/15'
+              }`}>
+                {s.id.replace('_', ' ')}
+              </span>
+            </div>
+            {i < steps.length - 1 && (
+              <div className="w-10 mx-0.5 mb-5 h-px relative overflow-hidden">
+                <div className="absolute inset-0 bg-white/8 rounded-full" />
+                <motion.div
+                  className="absolute inset-y-0 left-0 rounded-full"
+                  style={{ background: 'linear-gradient(90deg, #00ffd5, #22d3ee)' }}
+                  animate={{ width: i < currentStep ? '100%' : '0%' }}
+                  transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                />
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ─── Select step (single choice) ─── */
+function SelectStep({ stepConfig, value, onChange }) {
+  const iconMap = ICON_SETS[stepConfig.iconSet] || {}
+  const isSmallSet = (stepConfig.options || []).length <= 3
+  return (
+    <BubbleCard key={stepConfig.id}>
+      <div className={`grid gap-2.5 ${isSmallSet ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        {(stepConfig.options || []).map((opt) => {
+          const Icon = iconMap[opt.iconName]
+          const selected = value === opt.id
+          return (
+            <motion.button
+              key={opt.id}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => onChange(opt.id)}
+              className={`relative flex ${isSmallSet ? 'flex-col items-center gap-2 px-4 py-5' : 'items-center gap-2.5 px-4 py-3'} rounded-xl text-left transition-all duration-200 cursor-pointer ${
+                selected
+                  ? 'bg-cyan-400/15 text-cyan-300 border border-cyan-400/30 shadow-lg shadow-cyan-500/10'
+                  : 'bg-white/5 text-white/60 border border-white/8 hover:bg-white/8 hover:border-white/15'
+              }`}
+            >
+              {Icon && <Icon className={isSmallSet ? 'w-6 h-6' : 'w-4 h-4 shrink-0'} strokeWidth={1.8} />}
+              <span className="font-medium text-sm">{opt.label}</span>
+              {selected && !isSmallSet && (
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute right-2 w-4 h-4 rounded-full bg-cyan-400/20 flex items-center justify-center">
+                  <Check className="w-2.5 h-2.5 text-cyan-300" strokeWidth={3} />
+                </motion.div>
+              )}
+            </motion.button>
+          )
+        })}
+      </div>
+    </BubbleCard>
+  )
+}
+
+/* ─── Multi-select step (multiple choices) ─── */
+function MultiSelectStep({ stepConfig, value, onChange }) {
+  const selected = Array.isArray(value) ? value : []
+  const toggle = (id) => {
+    if (selected.includes(id)) onChange(selected.filter((v) => v !== id))
+    else onChange([...selected, id])
+  }
+  return (
+    <BubbleCard key={stepConfig.id}>
+      <div className="grid grid-cols-1 gap-2.5">
+        {(stepConfig.options || []).map((opt) => {
+          const isSelected = selected.includes(opt.id)
+          return (
+            <motion.button
+              key={opt.id}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => toggle(opt.id)}
+              className={`relative flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-all duration-200 cursor-pointer ${
+                isSelected
+                  ? 'bg-cyan-400/15 text-cyan-300 border border-cyan-400/30 shadow-lg shadow-cyan-500/10'
+                  : 'bg-white/5 text-white/60 border border-white/8 hover:bg-white/8 hover:border-white/15'
+              }`}
+            >
+              <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
+                isSelected ? 'bg-cyan-400/25 border-cyan-400/40' : 'border-white/15 bg-white/5'
+              }`}>
+                {isSelected && <Check className="w-3 h-3 text-cyan-300" strokeWidth={3} />}
+              </div>
+              <span className="font-medium text-sm">{opt.label}</span>
+            </motion.button>
+          )
+        })}
+      </div>
+      <p className="mt-2 text-[11px] text-white/20">Select one or more options</p>
+    </BubbleCard>
+  )
+}
+
+/* ─── Tags step ─── */
+function TagsStep({ skills, inputValue, inputRef, onSkillsChange, onInputChange, onKeyDown, onAddSkill }) {
+  return (
+    <BubbleCard key="tags">
+      <div className="flex flex-wrap items-center gap-2 min-h-[52px] p-3 rounded-xl bg-white/5 border border-white/10 focus-within:border-cyan-400/30 focus-within:bg-white/8 transition-all cursor-text" onClick={() => inputRef.current?.focus()}>
+        <AnimatePresence>
+          {skills.map((skill) => (
+            <SkillTag key={skill} skill={skill} onRemove={(v) => onSkillsChange(skills.filter((s) => s !== v))} />
+          ))}
+        </AnimatePresence>
+        <input
+          ref={inputRef}
+          type="text"
+          value={inputValue}
+          onChange={(e) => onInputChange(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder={skills.length === 0 ? 'Type a skill and press Enter...' : 'Add more...'}
+          className="flex-1 min-w-[100px] bg-transparent outline-none text-sm text-white/70 placeholder:text-white/20"
+        />
+      </div>
+      <p className="mt-2 text-[11px] text-white/20">Press Enter to add · Backspace to remove last</p>
+    </BubbleCard>
+  )
+}
+
+/* ─── Text step ─── */
+function TextStep({ stepConfig, value, onChange }) {
+  return (
+    <BubbleCard key={stepConfig.id}>
+      <textarea
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Tell us what excites you..."
+        rows={4}
+        className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-sm text-white/70 outline-none transition-colors placeholder:text-white/20 focus:border-cyan-400/30 focus:bg-white/8 resize-none"
+      />
+      <p className="mt-2 text-[11px] text-white/20">Optional — helps us personalize your results</p>
+    </BubbleCard>
+  )
+}
+
+/* ─── Main Questionnaire ─── */
 export default function Questionnaire({ onComplete }) {
+  const [steps, setSteps] = useState(null)
   const [step, setStep] = useState(0)
-  const [selectedDomain, setSelectedDomain] = useState(null)
-  const [selectedEnv, setSelectedEnv] = useState(null)
+  const [answers, setAnswers] = useState({})
   const [skills, setSkills] = useState([...DEFAULT_SKILLS])
   const [inputValue, setInputValue] = useState('')
-  const [linkedinUrl, setLinkedinUrl] = useState('')
   const inputRef = useRef(null)
 
-  const progress = ((step + 1) / STEPS.length) * 100
+  useEffect(() => {
+    let cancelled = false
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
+    fetch(`${API_BASE}/questionnaire`)
+      .then((r) => { if (!r.ok) throw new Error(); return r.json() })
+      .then((body) => {
+        if (cancelled) return
+        const data = body?.data || body
+        setSteps(data.steps)
+        const tagsStep = data.steps.find((s) => s.type === 'tags')
+        if (tagsStep?.defaults) setSkills(tagsStep.defaults)
+      })
+      .catch(() => { if (!cancelled) setSteps(FALLBACK_STEPS) })
+    return () => { cancelled = true }
+  }, [])
+
+  if (!steps) {
+    return (
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen flex items-center justify-center"
+        style={{ background: 'linear-gradient(180deg, #0f3d50 0%, #072535 50%, #021420 100%)' }}>
+        <OceanBg />
+        <div className="relative z-10 text-center">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-400 to-teal-500 mx-auto mb-4 flex items-center justify-center">
+            <Layers className="w-4 h-4 text-white" strokeWidth={2.5} />
+          </div>
+          <div className="h-5 w-40 mx-auto bg-white/8 rounded-lg animate-pulse" />
+        </div>
+      </motion.div>
+    )
+  }
+
+  const currentStep = steps[step]
+  const isLast = step === steps.length - 1
+
   const canNext =
-    (step === 0 && selectedDomain) ||
-    (step === 1 && selectedEnv) ||
-    (step === 2 && skills.length > 0)
+    (currentStep.type === 'select' && answers[currentStep.id]) ||
+    (currentStep.type === 'multi_select' && Array.isArray(answers[currentStep.id]) && answers[currentStep.id].length > 0) ||
+    (currentStep.type === 'tags' && skills.length > 0) ||
+    (currentStep.type === 'text')
 
   const handleNext = () => {
-    if (step < 2) {
+    if (!isLast) {
       setStep(step + 1)
       return
     }
     onComplete({
-      domain: selectedDomain,
-      environment: selectedEnv,
+      domain: answers.domain || null,
+      environment: answers.environment || null,
+      job_types: answers.job_types || [],
       skills,
-      linkedinUrl: linkedinUrl.trim() || null,
+      motivation: answers.motivation || null,
     })
   }
+
+  const setAnswer = (value) => setAnswers({ ...answers, [currentStep.id]: value })
 
   const addSkill = () => {
     const trimmed = inputValue.trim()
@@ -141,28 +351,20 @@ export default function Questionnaire({ onComplete }) {
   }
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      addSkill()
-    }
-    if (e.key === 'Backspace' && inputValue === '' && skills.length > 0) {
-      setSkills(skills.slice(0, -1))
-    }
+    if (e.key === 'Enter') { e.preventDefault(); addSkill() }
+    if (e.key === 'Backspace' && inputValue === '' && skills.length > 0) setSkills(skills.slice(0, -1))
   }
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       transition={{ duration: 0.5 }}
       className="min-h-screen relative flex flex-col"
-      style={{
-        background: 'linear-gradient(180deg, #0f3d50 0%, #0a2e3e 20%, #072535 45%, #041c2a 70%, #021420 100%)',
-      }}
+      style={{ background: 'linear-gradient(180deg, #0f3d50 0%, #0a2e3e 20%, #072535 45%, #041c2a 70%, #021420 100%)' }}
     >
       <OceanBg />
 
+      {/* Top bar */}
       <div className="relative z-10 px-6 pt-6 pb-4">
         <div className="flex items-center justify-between max-w-lg mx-auto">
           <div className="flex items-center gap-2">
@@ -171,11 +373,12 @@ export default function Questionnaire({ onComplete }) {
             </div>
             <span className="text-base font-bold text-cyan-300/70 tracking-tight">Reef</span>
           </div>
-          <span className="text-xs text-white/25 font-mono">{step + 1} / {STEPS.length}</span>
+          <span className="text-xs text-white/25 font-mono">{step + 1} / {steps.length}</span>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center relative z-10 px-6 pb-32">
+      {/* Main content */}
+      <div className="flex-1 flex flex-col items-center justify-center relative z-10 px-6 pb-36">
         <AnimatePresence mode="wait">
           <motion.div
             key={`header-${step}`}
@@ -185,113 +388,36 @@ export default function Questionnaire({ onComplete }) {
             transition={{ duration: 0.3 }}
             className="text-center mb-8"
           >
-            <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight mb-2">
-              {STEPS[step].question}
-            </h1>
-            <p className="text-white/30 text-sm">{STEPS[step].sub}</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight mb-2">{currentStep.question}</h1>
+            <p className="text-white/30 text-sm">{currentStep.sub}</p>
           </motion.div>
         </AnimatePresence>
 
         <AnimatePresence mode="wait">
-          {step === 0 && (
-            <BubbleCard key="domain">
-              <div className="grid grid-cols-2 gap-2.5">
-                {DOMAIN_OPTIONS.map((d) => {
-                  const Icon = DOMAIN_ICONS[d.iconName]
-                  const selected = selectedDomain === d.id
-                  return (
-                    <motion.button
-                      key={d.id}
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.97 }}
-                      onClick={() => setSelectedDomain(d.id)}
-                      className={`relative flex items-center gap-2.5 px-4 py-3 rounded-xl text-left transition-all duration-200 cursor-pointer ${
-                        selected
-                          ? 'bg-cyan-400/15 text-cyan-300 border border-cyan-400/30 shadow-lg shadow-cyan-500/10'
-                          : 'bg-white/5 text-white/60 border border-white/8 hover:bg-white/8 hover:border-white/15'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4 shrink-0" strokeWidth={1.8} />
-                      <span className="font-medium text-sm">{d.label}</span>
-                      {selected && (
-                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute right-2 w-4 h-4 rounded-full bg-cyan-400/20 flex items-center justify-center">
-                          <Check className="w-2.5 h-2.5 text-cyan-300" strokeWidth={3} />
-                        </motion.div>
-                      )}
-                    </motion.button>
-                  )
-                })}
-              </div>
-            </BubbleCard>
+          {currentStep.type === 'select' && (
+            <SelectStep key={currentStep.id} stepConfig={currentStep} value={answers[currentStep.id]} onChange={setAnswer} />
           )}
-
-          {step === 1 && (
-            <BubbleCard key="env">
-              <div className="grid grid-cols-3 gap-3">
-                {ENVIRONMENT_OPTIONS.map((e) => {
-                  const Icon = ENV_ICONS[e.iconName]
-                  const selected = selectedEnv === e.id
-                  return (
-                    <motion.button
-                      key={e.id}
-                      whileHover={{ scale: 1.04 }}
-                      whileTap={{ scale: 0.96 }}
-                      onClick={() => setSelectedEnv(e.id)}
-                      className={`flex flex-col items-center gap-2 px-4 py-5 rounded-xl transition-all duration-200 cursor-pointer ${
-                        selected
-                          ? 'bg-cyan-400/15 text-cyan-300 border border-cyan-400/30 shadow-lg shadow-cyan-500/10'
-                          : 'bg-white/5 text-white/60 border border-white/8 hover:bg-white/8 hover:border-white/15'
-                      }`}
-                    >
-                      <Icon className="w-6 h-6" strokeWidth={1.8} />
-                      <span className="font-medium text-sm">{e.label}</span>
-                    </motion.button>
-                  )
-                })}
-              </div>
-            </BubbleCard>
+          {currentStep.type === 'multi_select' && (
+            <MultiSelectStep key={currentStep.id} stepConfig={currentStep} value={answers[currentStep.id]} onChange={setAnswer} />
           )}
-
-          {step === 2 && (
-            <BubbleCard key="skills">
-              <div className="flex flex-wrap items-center gap-2 min-h-[52px] p-3 rounded-xl bg-white/5 border border-white/10 focus-within:border-cyan-400/30 focus-within:bg-white/8 transition-all cursor-text" onClick={() => inputRef.current?.focus()}>
-                <AnimatePresence>
-                  {skills.map((skill) => (
-                    <SkillTag key={skill} skill={skill} onRemove={(value) => setSkills(skills.filter((item) => item !== value))} />
-                  ))}
-                </AnimatePresence>
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={skills.length === 0 ? 'Type a skill and press Enter...' : 'Add more...'}
-                  className="flex-1 min-w-[100px] bg-transparent outline-none text-sm text-white/70 placeholder:text-white/20"
-                />
-              </div>
-              <p className="mt-2 text-[11px] text-white/20">Press Enter to add, Backspace to remove</p>
-
-              <div className="mt-5 rounded-2xl border border-white/10 bg-black/10 p-4">
-                <div className="flex items-center gap-2 text-cyan-300/90">
-                  <Link2 className="h-4 w-4" strokeWidth={2} />
-                  <span className="text-sm font-semibold">Optional LinkedIn jobs link</span>
-                </div>
-                <p className="mt-2 text-xs text-white/35">
-                  Paste a LinkedIn Jobs search URL if you want the backend to ask TinyFish to import fresh postings before ranking.
-                </p>
-                <input
-                  type="url"
-                  value={linkedinUrl}
-                  onChange={(e) => setLinkedinUrl(e.target.value)}
-                  placeholder="https://www.linkedin.com/jobs/search/?keywords=backend%20engineer"
-                  className="mt-3 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/75 outline-none transition-colors placeholder:text-white/20 focus:border-cyan-400/30 focus:bg-white/8"
-                />
-              </div>
-            </BubbleCard>
+          {currentStep.type === 'tags' && (
+            <TagsStep
+              key="tags"
+              skills={skills}
+              inputValue={inputValue}
+              inputRef={inputRef}
+              onSkillsChange={setSkills}
+              onInputChange={setInputValue}
+              onKeyDown={handleKeyDown}
+              onAddSkill={addSkill}
+            />
+          )}
+          {currentStep.type === 'text' && (
+            <TextStep key={currentStep.id} stepConfig={currentStep} value={answers[currentStep.id]} onChange={setAnswer} />
           )}
         </AnimatePresence>
 
+        {/* Next / Submit button */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="mt-8">
           <motion.button
             whileHover={canNext ? { scale: 1.05 } : {}}
@@ -312,7 +438,7 @@ export default function Questionnaire({ onComplete }) {
                 transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
               />
             )}
-            {step === 2 ? (
+            {isLast ? (
               <>
                 <Sparkles className="relative z-10 w-4 h-4" strokeWidth={2} />
                 <span className="relative z-10">Scan the Market</span>
@@ -327,31 +453,18 @@ export default function Questionnaire({ onComplete }) {
         </motion.div>
       </div>
 
+      {/* ── Step indicators — fixed at bottom ── */}
       <div className="fixed bottom-0 left-0 right-0 z-20">
-        <div className="h-1 bg-white/5">
+        <div className="h-0.5 bg-white/5">
           <motion.div
-            className="h-full rounded-r-full"
-            style={{
-              background: 'linear-gradient(90deg, #00ffd5, #22d3ee)',
-              boxShadow: '0 0 12px rgba(0,255,213,0.3)',
-            }}
-            animate={{ width: `${progress}%` }}
+            className="h-full"
+            style={{ background: 'linear-gradient(90deg, #00ffd5, #22d3ee)', boxShadow: '0 0 12px rgba(0,255,213,0.3)' }}
+            animate={{ width: `${((step + 1) / steps.length) * 100}%` }}
             transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
           />
         </div>
-        <div className="bg-black/20 backdrop-blur-sm px-6 py-3 flex items-center justify-center gap-8">
-          {STEPS.map((s, i) => (
-            <div key={s.id} className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                i < step ? 'bg-cyan-400' : i === step ? 'bg-cyan-400 shadow-lg shadow-cyan-400/50' : 'bg-white/10'
-              }`} />
-              <span className={`text-xs font-medium transition-colors duration-300 ${
-                i <= step ? 'text-white/50' : 'text-white/15'
-              }`}>
-                {s.id === 'domain' ? 'Domain' : s.id === 'env' ? 'Environment' : 'Skills'}
-              </span>
-            </div>
-          ))}
+        <div className="bg-black/25 backdrop-blur-sm px-6 py-4">
+          <StepIndicators steps={steps} currentStep={step} />
         </div>
       </div>
     </motion.div>

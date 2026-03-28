@@ -1,11 +1,14 @@
 import hashlib
 import json
+import logging
 import re
 from datetime import datetime, timezone
 from time import monotonic, sleep
 from urllib.parse import urlparse
 
 from flask import current_app
+
+logger = logging.getLogger(__name__)
 
 from app.errors import AppError, ValidationError
 from app.repositories import JobAggregationRepository
@@ -22,6 +25,8 @@ from app.services.preference_normalizer import (
 )
 from app.services.tinyfish_client import TinyFishClient
 from app.utils.responses import serialize_document
+
+from typing import Optional
 
 
 SENIORITY_KEYWORDS = {
@@ -70,7 +75,9 @@ class JobAggregationService:
         request_payload = payload.model_dump(mode="json", exclude_none=True)
         client = TinyFishClient()
         tinyfish_payload = self._build_linkedin_tinyfish_payload(request_payload)
+        logger.info("[TinyFish] Starting async run with payload: %s", json.dumps(tinyfish_payload, default=str))
         tinyfish_response = client.start_async_run(tinyfish_payload)
+        logger.info("[TinyFish] start_async_run response: %s", json.dumps(tinyfish_response, default=str))
         provider_run_id = tinyfish_response.get("run_id") or tinyfish_response.get("id")
         if not provider_run_id:
             raise ValidationError(
@@ -85,6 +92,8 @@ class JobAggregationService:
             poll_interval_seconds=request_payload["poll_interval_seconds"],
         )
         remote_status = ((remote_run or {}).get("status") or "QUEUED").upper()
+        logger.info("[TinyFish] Run %s final status: %s", provider_run_id, remote_status)
+        logger.info("[TinyFish] Run response keys: %s", list((remote_run or {}).keys()))
 
         if remote_status != "COMPLETED":
             return serialize_document(
@@ -102,10 +111,10 @@ class JobAggregationService:
                 }
             )
 
-        extracted_jobs = self._extract_jobs_from_tinyfish(
-            remote_run.get("result") or remote_run,
-            request_payload,
-        )
+        raw_result = remote_run.get("result") or remote_run
+        logger.info("[TinyFish] Extracting jobs from result type=%s, keys=%s", type(raw_result).__name__, list(raw_result.keys()) if isinstance(raw_result, dict) else "N/A")
+        extracted_jobs = self._extract_jobs_from_tinyfish(raw_result, request_payload)
+        logger.info("[TinyFish] Extracted %d jobs", len(extracted_jobs))
         if not extracted_jobs:
             raise ValidationError(
                 "TinyFish completed, but no LinkedIn job postings could be extracted.",
@@ -140,6 +149,66 @@ class JobAggregationService:
                     "run_id": provider_run_id,
                     "status": remote_status,
                 },
+                "ingestion": ingestion_result,
+            }
+        )
+
+    def poll_linkedin_run(self, provider_run_id: str, target_role: str, linkedin_url: str):
+        client = TinyFishClient()
+        remote_run = client.get_run(provider_run_id)
+        remote_status = ((remote_run or {}).get("status") or "UNKNOWN").upper()
+
+        if remote_status != "COMPLETED":
+            return serialize_document(
+                {
+                    "status": "running" if remote_status in ("RUNNING", "PENDING", "QUEUED") else remote_status.lower(),
+                    "provider_run_id": provider_run_id,
+                    "tinyfish": {"run_id": provider_run_id, "status": remote_status},
+                }
+            )
+
+        request_payload = {
+            "target_role": target_role,
+            "linkedin_url": linkedin_url,
+            "max_jobs": 12,
+        }
+        extracted_jobs = self._extract_jobs_from_tinyfish(
+            remote_run.get("result") or remote_run,
+            request_payload,
+        )
+        if not extracted_jobs:
+            return serialize_document(
+                {
+                    "status": "completed",
+                    "provider_run_id": provider_run_id,
+                    "jobs_ingested": 0,
+                    "tinyfish": {"run_id": provider_run_id, "status": remote_status},
+                }
+            )
+
+        ingestion_request = {
+            "connector_type": "tinyfish_linkedin",
+            "connector_name": "TinyFish LinkedIn Connector",
+            "source_label": "LinkedIn via TinyFish",
+            "source_url": linkedin_url,
+            "jobs": extracted_jobs,
+            "metadata": {
+                "provider_run_id": provider_run_id,
+                "target_role": target_role,
+            },
+        }
+        ingestion_result = self._ingest_jobs(
+            ingestion_request,
+            ingestion_request["connector_name"],
+            extracted_jobs,
+        )
+
+        return serialize_document(
+            {
+                "status": "completed",
+                "provider_run_id": provider_run_id,
+                "jobs_ingested": ingestion_result.get("metrics", {}).get("normalized_jobs", 0),
+                "tinyfish": {"run_id": provider_run_id, "status": remote_status},
                 "ingestion": ingestion_result,
             }
         )
@@ -201,7 +270,7 @@ class JobAggregationService:
             self.repository.fail_run(run.id, str(error), metrics)
             raise
 
-    def fetch_metrics(self, connector_type: str | None = None):
+    def fetch_metrics(self, connector_type: Optional[str] = None):
         return serialize_document(
             {
                 "metrics": self.repository.fetch_metrics(connector_type),
@@ -209,7 +278,7 @@ class JobAggregationService:
             }
         )
 
-    def list_ingested_jobs(self, limit: int, offset: int, source: str | None = None, role: str | None = None):
+    def list_ingested_jobs(self, limit: int, offset: int, source: Optional[str] = None, role: Optional[str] = None):
         return serialize_document(self.repository.list_ingested_jobs(limit, offset, source=source, role=role))
 
     def retry_failed_jobs(self, payload):
@@ -515,7 +584,7 @@ class JobAggregationService:
                     return nested_jobs
         return []
 
-    def _normalize_tinyfish_job(self, job: dict, request_payload: dict) -> dict | None:
+    def _normalize_tinyfish_job(self, job: dict, request_payload: dict) -> Optional[dict]:
         title = self._pick_first(job, "title", "job_title", "position", "role")
         company = self._pick_first(job, "company_name", "company", "employer", "organization")
         if not self._clean_text(title) or not self._clean_text(company):
@@ -653,13 +722,13 @@ class JobAggregationService:
             normalized.append(canonical)
         return normalized
 
-    def _normalize_company_size(self, value) -> str | None:
+    def _normalize_company_size(self, value) -> Optional[str]:
         cleaned = self._clean_text(value).lower()
         if not cleaned:
             return None
         return COMPANY_SIZE_MAP.get(cleaned, cleaned.replace("-", "_").replace(" ", "_"))
 
-    def _normalize_company_type(self, value) -> str | None:
+    def _normalize_company_type(self, value) -> Optional[str]:
         cleaned = self._clean_text(value).lower()
         if not cleaned:
             return None
@@ -696,7 +765,7 @@ class JobAggregationService:
                 skills.append(skill.canonical_name)
         return skills
 
-    def _parse_salary(self, salary_text: str | None) -> dict:
+    def _parse_salary(self, salary_text: Optional[str]) -> dict:
         if not salary_text:
             return {"min": None, "max": None, "currency": None, "period": None}
 
@@ -770,19 +839,19 @@ class JobAggregationService:
         )
         return hashlib.sha1(base.encode("utf-8")).hexdigest()
 
-    def _summarize_description(self, description: str) -> str | None:
+    def _summarize_description(self, description: str) -> Optional[str]:
         cleaned = self._clean_multiline_text(description)
         if not cleaned:
             return None
         return cleaned[:280]
 
-    def _hash_text(self, value: str) -> str | None:
+    def _hash_text(self, value: str) -> Optional[str]:
         cleaned = self._clean_multiline_text(value)
         if not cleaned:
             return None
         return hashlib.sha1(cleaned.encode("utf-8")).hexdigest()
 
-    def _hostname(self, url: str | None) -> str | None:
+    def _hostname(self, url: Optional[str]) -> Optional[str]:
         if not url:
             return None
         parsed = urlparse(url)

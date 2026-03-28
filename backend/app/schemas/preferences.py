@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError as PydanticError, field_validator, model_validator
 
@@ -8,10 +8,10 @@ from app.errors import ValidationError
 class SalaryExpectationPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    min_amount: int | None = Field(default=None, ge=0)
-    max_amount: int | None = Field(default=None, ge=0)
-    currency: str | None = None
-    period: str | None = None
+    min_amount: Optional[int] = Field(default=None, ge=0)
+    max_amount: Optional[int] = Field(default=None, ge=0)
+    currency: Optional[str] = None
+    period: Optional[str] = None
 
     @model_validator(mode="after")
     def validate_range(self):
@@ -24,13 +24,13 @@ class PreferencePayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     target_roles: list[str] = Field(default_factory=list)
-    work_arrangement: str | list[str] | None = None
-    industries: list[str] | str = Field(default_factory=list)
-    locations: list[str] | str = Field(default_factory=list)
-    job_type: str | list[str] | None = None
-    salary_expectations: SalaryExpectationPayload | None = None
-    company_size: list[str] | str = Field(default_factory=list)
-    company_type: list[str] | str = Field(default_factory=list)
+    work_arrangement: Optional[Union[str, List[str]]] = None
+    industries: Union[List[str], str] = Field(default_factory=list)
+    locations: Union[List[str], str] = Field(default_factory=list)
+    job_type: Optional[Union[str, List[str]]] = None
+    salary_expectations: Optional[SalaryExpectationPayload] = None
+    company_size: Union[List[str], str] = Field(default_factory=list)
+    company_type: Union[List[str], str] = Field(default_factory=list)
 
     @field_validator("target_roles", "industries", "locations", "company_size", "company_type", mode="before")
     @classmethod

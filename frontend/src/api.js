@@ -77,6 +77,11 @@ export function importLinkedInJobs(payload) {
   })
 }
 
+export function pollLinkedInRun(providerRunId, targetRole, linkedinUrl) {
+  const params = new URLSearchParams({ target_role: targetRole, linkedin_url: linkedinUrl })
+  return request(`/job-aggregation/linkedin/poll/${providerRunId}?${params.toString()}`)
+}
+
 export function fetchRecommendations(userId, limit = 10) {
   const params = new URLSearchParams({ user_id: userId, limit: String(limit) })
   return request(`/jobs/recommendations?${params.toString()}`)

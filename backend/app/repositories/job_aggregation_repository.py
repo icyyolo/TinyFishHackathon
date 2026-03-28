@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import List, Optional, Union
 
 from sqlalchemy import func, select
 
@@ -32,7 +33,7 @@ class JobAggregationRepository:
         connector_type: str,
         connector_name: str,
         source_label: str,
-        source_url: str | None,
+        source_url: Optional[str],
         request_payload: dict,
         requested_job_count: int,
     ) -> JobIngestionRun:
@@ -70,7 +71,7 @@ class JobAggregationRepository:
         db.session.commit()
         return run.to_dict()
 
-    def fail_run(self, run_id: str, error_message: str, metrics_json: dict | None = None) -> dict:
+    def fail_run(self, run_id: str, error_message: str, metrics_json: Optional[dict] = None) -> dict:
         db.session.rollback()
         run = self._get_run_model(run_id)
         run.status = "failed"
@@ -88,9 +89,9 @@ class JobAggregationRepository:
         run_id: str,
         source_connector: str,
         source_name: str,
-        source_job_id: str | None,
-        source_url: str | None,
-        apply_url: str | None,
+        source_job_id: Optional[str],
+        source_url: Optional[str],
+        apply_url: Optional[str],
         raw_payload: dict,
     ) -> RawJobPosting:
         raw_job = RawJobPosting(
@@ -118,8 +119,8 @@ class JobAggregationRepository:
 
     def get_retryable_raw_jobs(
         self,
-        run_id: str | None = None,
-        raw_job_ids: list[str] | None = None,
+        run_id: Optional[str] = None,
+        raw_job_ids: Optional[List[str]] = None,
         limit: int = 25,
     ) -> list[RawJobPosting]:
         query = select(RawJobPosting).where(
@@ -132,7 +133,7 @@ class JobAggregationRepository:
         query = query.order_by(RawJobPosting.updated_at.desc()).limit(limit)
         return list(db.session.scalars(query).all())
 
-    def find_job_by_deduplication_key(self, deduplication_key: str | None) -> NormalizedJobPosting | None:
+    def find_job_by_deduplication_key(self, deduplication_key: Optional[str]) -> Optional[NormalizedJobPosting]:
         if not deduplication_key:
             return None
         return db.session.scalar(
@@ -217,8 +218,8 @@ class JobAggregationRepository:
         self,
         limit: int,
         offset: int,
-        source: str | None = None,
-        role: str | None = None,
+        source: Optional[str] = None,
+        role: Optional[str] = None,
     ) -> dict:
         base_query = select(NormalizedJobPosting)
         if source:
@@ -257,7 +258,7 @@ class JobAggregationRepository:
             "jobs": items,
         }
 
-    def fetch_metrics(self, connector_type: str | None = None) -> dict:
+    def fetch_metrics(self, connector_type: Optional[str] = None) -> dict:
         run_query = select(JobIngestionRun)
         if connector_type:
             run_query = run_query.where(JobIngestionRun.connector_type == connector_type)
@@ -364,7 +365,7 @@ class JobAggregationRepository:
                 titled.append(part.capitalize())
         return " ".join(titled)
 
-    def _prefer_longer_text(self, current: str | None, incoming: str | None) -> str | None:
+    def _prefer_longer_text(self, current: Optional[str], incoming: Optional[str]) -> Optional[str]:
         if not incoming:
             return current
         if not current:

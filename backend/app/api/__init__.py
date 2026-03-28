@@ -5,6 +5,7 @@ from app.api.job_aggregation import job_aggregation_bp
 from app.api.jobs import jobs_bp
 from app.api.onboarding import onboarding_bp
 from app.api.preferences import preferences_bp
+from app.api.questionnaire import questionnaire_bp
 from app.api.skills import skills_bp
 
 
@@ -15,3 +16,4 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(skills_bp, url_prefix="/api/skills")
     app.register_blueprint(jobs_bp, url_prefix="/api/jobs")
     app.register_blueprint(job_aggregation_bp, url_prefix="/api/job-aggregation")
+    app.register_blueprint(questionnaire_bp, url_prefix="/api/questionnaire")

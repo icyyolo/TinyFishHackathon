@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional
 
 from app.repositories import JobMatchingRepository
 from app.services.preference_normalizer import PreferenceNormalizer
@@ -153,7 +154,7 @@ class JobMatchingService:
         skills = self._build_user_skill_profile(onboarding_profile, session_profile, latest_session, skill_lookup)
         return {"user": user, "preferences": normalized_preferences, "years_experience": years_experience, "skills": skills}
 
-    def _build_user_skill_profile(self, onboarding_profile: dict, session_profile: dict, latest_session: dict | None, lookup: dict):
+    def _build_user_skill_profile(self, onboarding_profile: dict, session_profile: dict, latest_session: Optional[dict], lookup: dict):
         aggregated = {}
         self._merge_skill_source(aggregated, (onboarding_profile.get("skills") or {}).get("user_selected", []), "manual_profile", 1.0, lookup)
         self._merge_skill_source(aggregated, (onboarding_profile.get("skills") or {}).get("extracted", []), "ai_profile", 0.8, lookup)

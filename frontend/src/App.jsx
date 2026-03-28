@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import SplashScreen from './components/SplashScreen'
 import Questionnaire from './components/Questionnaire'
@@ -13,6 +13,7 @@ import {
   fetchSkillTrends,
   getOrCreateIdentity,
   importLinkedInJobs,
+  pollLinkedInRun,
   savePreferences,
 } from './api'
 import { getDomainOption, getEnvironmentOption } from './data/catalog'
@@ -23,6 +24,11 @@ function buildSessionPayload(choices) {
   const environment = getEnvironmentOption(choices.environment)
   const targetRole = domain?.targetRole || 'Backend Engineer'
   const location = environment?.backendValue === 'remote' ? 'Remote' : 'Singapore'
+
+  const jobTypes = choices.job_types?.length ? choices.job_types : ['full-time']
+  const motivation = choices.motivation || ''
+  const summaryParts = [`Interested in ${domain?.label || targetRole} roles with a ${environment?.label || 'flexible'} setup.`]
+  if (motivation) summaryParts.push(motivation)
 
   return {
     targetRole,
@@ -35,7 +41,7 @@ function buildSessionPayload(choices) {
         headline: `Aspiring ${targetRole}`,
         location,
         years_of_experience: 0,
-        summary: `Interested in ${domain?.label || targetRole} roles with a ${environment?.label || 'flexible'} setup.`,
+        summary: summaryParts.join(' '),
       },
       education_background: [],
       skills: choices.skills,
@@ -43,14 +49,14 @@ function buildSessionPayload(choices) {
       work_preferences: {
         locations: [location],
         remote_preference: environment?.backendValue || 'hybrid',
-        employment_type: 'full-time',
+        employment_type: jobTypes[0],
       },
     },
     preferencesPayload: {
       target_roles: [targetRole],
       work_arrangement: [environment?.backendValue || 'hybrid'],
       locations: [location],
-      job_type: ['full-time'],
+      job_type: jobTypes,
       industries: targetRole === 'Data Analyst' ? ['tech', 'finance'] : ['tech'],
       company_type: ['product'],
     },
@@ -158,7 +164,7 @@ function mapMatchDetailToUiJob(previousJob, detail) {
 export default function App() {
   const [zone, setZone] = useState('splash')
   const [selectedJob, setSelectedJob] = useState(null)
-  const [userChoices, setUserChoices] = useState({ domain: null, environment: null, skills: [], linkedinUrl: null })
+  const [userChoices, setUserChoices] = useState({ domain: null, environment: null, job_types: [], skills: [], motivation: '' })
   const [scanState, setScanState] = useState({ progress: 5, message: 'Deploying AI Agent...', error: null })
   const [integrationData, setIntegrationData] = useState({
     userId: null,
@@ -183,36 +189,34 @@ export default function App() {
       const { targetRole, sessionPayload, preferencesPayload } = buildSessionPayload(choices)
       const session = await createOnboardingSession(sessionPayload)
 
-      setScanState({ progress: 32, message: 'Normalizing your preferences...', error: null })
+      setScanState({ progress: 25, message: 'Normalizing your preferences...', error: null })
       await savePreferences(session.user_id, preferencesPayload)
 
-      let linkedinImport = null
-      if (choices.linkedinUrl) {
-        setScanState({ progress: 48, message: 'Importing LinkedIn jobs via TinyFish...', error: null })
-        try {
-          linkedinImport = await importLinkedInJobs({
-            linkedin_url: choices.linkedinUrl,
-            target_role: targetRole,
-            max_jobs: 12,
-          })
-        } catch (error) {
-          linkedinImport = {
-            status: 'failed',
-            message: error.message || 'Unable to import LinkedIn jobs right now.',
-          }
-        }
+      // Fire TinyFish with a short timeout — get run_id back quickly
+      const linkedinUrl = `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(targetRole)}`
+      setScanState({ progress: 40, message: 'Dispatching TinyFish to LinkedIn...', error: null })
+      let providerRunId = null
+      try {
+        const syncResult = await importLinkedInJobs({
+          linkedin_url: linkedinUrl,
+          target_role: targetRole,
+          max_jobs: 12,
+          wait_timeout_seconds: 5,
+          poll_interval_seconds: 2,
+        })
+        providerRunId = syncResult?.provider_run_id || null
+        // If it completed within 5s (unlikely but possible), jobs are already ingested
+        if (syncResult?.status === 'completed') providerRunId = null
+      } catch {
+        // TinyFish dispatch failed — continue without it
       }
 
-      setScanState({
-        progress: 62,
-        message: linkedinImport?.status === 'completed'
-          ? 'Ranking fresh LinkedIn and existing jobs...'
-          : 'Scanning normalized job postings...',
-        error: null,
-      })
+      setScanState({ progress: 60, message: 'TinyFish is scraping LinkedIn in the background...', error: null })
+
+      // Fetch initial recommendations (seed data + any previously ingested jobs)
       const recommendations = await fetchRecommendations(session.user_id, 10)
 
-      setScanState({ progress: 82, message: 'Calculating job match scores...', error: null })
+      setScanState({ progress: 80, message: 'Calculating skill insights...', error: null })
       const [radarResult, trendsResult] = await Promise.allSettled([
         fetchSkillRadar(session.user_id, targetRole),
         fetchSkillTrends(targetRole, 6),
@@ -225,7 +229,7 @@ export default function App() {
         jobs: (recommendations?.jobs || []).map(mapRecommendationToUiJob),
         radar: radarResult.status === 'fulfilled' ? radarResult.value : null,
         trends: trendsResult.status === 'fulfilled' ? trendsResult.value?.skills || [] : [],
-        linkedinImport,
+        linkedinImport: providerRunId ? { status: 'polling', providerRunId, linkedinUrl } : null,
       })
 
       setScanState({ progress: 100, message: 'Dive ready.', error: null })
@@ -256,6 +260,49 @@ export default function App() {
       })
     }
   }, [integrationData.userId])
+
+  // Background poll: when TinyFish run is pending, poll until complete then refresh jobs
+  const pollingRef = useRef(false)
+  useEffect(() => {
+    const pending = integrationData.linkedinImport
+    if (!pending || pending.status !== 'polling' || !pending.providerRunId || !integrationData.userId) return
+    if (pollingRef.current) return
+    pollingRef.current = true
+
+    let cancelled = false
+    const poll = async () => {
+      const maxAttempts = 40 // ~200 seconds at 5s intervals
+      for (let i = 0; i < maxAttempts && !cancelled; i++) {
+        await new Promise((r) => setTimeout(r, 5000))
+        if (cancelled) break
+        try {
+          const result = await pollLinkedInRun(
+            pending.providerRunId,
+            integrationData.targetRole,
+            pending.linkedinUrl,
+          )
+          if (result?.status === 'completed') {
+            // TinyFish done — re-fetch recommendations with new jobs
+            const recommendations = await fetchRecommendations(integrationData.userId, 10)
+            if (!cancelled) {
+              setIntegrationData((prev) => ({
+                ...prev,
+                jobs: (recommendations?.jobs || []).map(mapRecommendationToUiJob),
+                linkedinImport: { status: 'completed', jobsIngested: result.jobs_ingested || 0 },
+              }))
+            }
+            break
+          }
+          if (result?.status !== 'running') break // failed or unknown
+        } catch {
+          break
+        }
+      }
+      pollingRef.current = false
+    }
+    poll()
+    return () => { cancelled = true }
+  }, [integrationData.linkedinImport, integrationData.userId, integrationData.targetRole])
 
   const handleCloseModal = useCallback(() => {
     setSelectedJob(null)
@@ -289,6 +336,7 @@ export default function App() {
             trends={integrationData.trends}
             targetRole={integrationData.targetRole}
             onSelectJob={handleSelectJob}
+            isPollingLinkedIn={integrationData.linkedinImport?.status === 'polling'}
           />
         )}
       </AnimatePresence>

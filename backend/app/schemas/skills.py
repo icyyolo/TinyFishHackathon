@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError as PydanticError
 
 from app.errors import ValidationError
@@ -24,10 +26,10 @@ class TinyFishIngestionStartPayload(BaseModel):
     source_url: HttpUrl
     target_role: str = Field(min_length=2)
     max_jobs: int = Field(default=20, ge=1, le=100)
-    browser_profile: str | None = None
+    browser_profile: Optional[str] = None
     proxy_enabled: bool = False
-    proxy_country_code: str | None = None
-    goal_override: str | None = None
+    proxy_country_code: Optional[str] = None
+    goal_override: Optional[str] = None
 
 
 class TinyFishRunQuery(BaseModel):

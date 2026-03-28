@@ -1,3 +1,5 @@
+from typing import List, Optional, Union
+
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -14,45 +16,45 @@ from app.errors import ValidationError
 class RawJobInput(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    source_job_id: str | None = None
-    external_id: str | None = None
-    title: str | None = None
-    company: str | None = None
-    company_name: str | None = None
-    description: str | None = None
-    description_summary: str | None = None
-    location: str | list[str] | None = None
-    locations: list[str] | None = None
-    work_arrangement: str | None = None
-    posted_date: str | None = None
-    posted_at: str | None = None
-    salary_text: str | None = None
-    salary: str | None = None
-    source: str | None = None
-    source_url: str | None = None
-    apply_url: str | None = None
-    url: str | None = None
-    job_url: str | None = None
-    role_name: str | None = None
-    job_type: str | None = None
-    industries: list[str] | str | None = None
-    company_size: str | None = None
-    company_type: str | None = None
-    seniority_level: str | None = None
-    years_experience_min: float | None = None
-    years_experience_max: float | None = None
-    skills: list[str] | str | None = None
-    required_skills: list[str] | str | None = None
-    preferred_skills: list[str] | str | None = None
+    source_job_id: Optional[str] = None
+    external_id: Optional[str] = None
+    title: Optional[str] = None
+    company: Optional[str] = None
+    company_name: Optional[str] = None
+    description: Optional[str] = None
+    description_summary: Optional[str] = None
+    location: Optional[Union[str, List[str]]] = None
+    locations: Optional[List[str]] = None
+    work_arrangement: Optional[str] = None
+    posted_date: Optional[str] = None
+    posted_at: Optional[str] = None
+    salary_text: Optional[str] = None
+    salary: Optional[str] = None
+    source: Optional[str] = None
+    source_url: Optional[str] = None
+    apply_url: Optional[str] = None
+    url: Optional[str] = None
+    job_url: Optional[str] = None
+    role_name: Optional[str] = None
+    job_type: Optional[str] = None
+    industries: Optional[Union[List[str], str]] = None
+    company_size: Optional[str] = None
+    company_type: Optional[str] = None
+    seniority_level: Optional[str] = None
+    years_experience_min: Optional[float] = None
+    years_experience_max: Optional[float] = None
+    skills: Optional[Union[List[str], str]] = None
+    required_skills: Optional[Union[List[str], str]] = None
+    preferred_skills: Optional[Union[List[str], str]] = None
 
 
 class JobAggregationRunPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     connector_type: str = Field(default="manual", min_length=2)
-    connector_name: str | None = None
-    source_label: str | None = None
-    source_url: HttpUrl | None = None
+    connector_name: Optional[str] = None
+    source_label: Optional[str] = None
+    source_url: Optional[HttpUrl] = None
     jobs: list[RawJobInput] = Field(min_length=1)
     metadata: dict = Field(default_factory=dict)
 
@@ -65,10 +67,10 @@ class LinkedInTinyFishIngestionPayload(BaseModel):
     max_jobs: int = Field(default=12, ge=1, le=25)
     wait_timeout_seconds: int = Field(default=20, ge=5, le=90)
     poll_interval_seconds: int = Field(default=3, ge=1, le=15)
-    browser_profile: str | None = None
-    proxy_enabled: bool | None = None
-    proxy_country_code: str | None = Field(default=None, min_length=2, max_length=2)
-    goal_override: str | None = Field(default=None, min_length=10, max_length=2000)
+    browser_profile: Optional[str] = None
+    proxy_enabled: Optional[bool] = None
+    proxy_country_code: Optional[str] = Field(default=None, min_length=2, max_length=2)
+    goal_override: Optional[str] = Field(default=None, min_length=10, max_length=2000)
 
     @field_validator("linkedin_url")
     @classmethod
@@ -82,7 +84,7 @@ class LinkedInTinyFishIngestionPayload(BaseModel):
 class JobAggregationMetricsQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    connector_type: str | None = None
+    connector_type: Optional[str] = None
 
 
 class JobAggregationListJobsQuery(BaseModel):
@@ -90,15 +92,15 @@ class JobAggregationListJobsQuery(BaseModel):
 
     limit: int = Field(default=20, ge=1, le=100)
     offset: int = Field(default=0, ge=0)
-    source: str | None = None
-    role: str | None = None
+    source: Optional[str] = None
+    role: Optional[str] = None
 
 
 class RetryFailedJobsPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    run_id: str | None = None
-    raw_job_ids: list[str] | None = None
+    run_id: Optional[str] = None
+    raw_job_ids: Optional[List[str]] = None
     limit: int = Field(default=25, ge=1, le=100)
 
     @model_validator(mode="after")
@@ -113,7 +115,7 @@ class RetryFailedJobsPayload(BaseModel):
 class RetryFailedJobsQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    run_id: str | None = None
+    run_id: Optional[str] = None
 
 
 def validate_payload(schema_class, payload):

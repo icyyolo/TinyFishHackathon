@@ -159,7 +159,7 @@ function buildInsightModel(jobs, radar, trends) {
   return { bestRoles, skillsToLearn }
 }
 
-export default function Zone3Descent({ jobs = [], radar, trends = [], targetRole, onSelectJob }) {
+export default function Zone3Descent({ jobs = [], radar, trends = [], targetRole, onSelectJob, isPollingLinkedIn = false }) {
   const insights = buildInsightModel(jobs, radar, trends)
   const groupedSections = [
     { label: 'Surface - Strongest Matches', depth: 'shallow', jobs: jobs.filter((job) => job.depth === 'shallow') },
@@ -171,8 +171,8 @@ export default function Zone3Descent({ jobs = [], radar, trends = [], targetRole
   let globalIndex = 0
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.6 }}>
-      <div className="relative" style={{ background: 'linear-gradient(180deg, #ecfeff 0%, #cffafe 25%, #a5f3fc 55%, #67e8f9 85%, #22d3ee 100%)' }}>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.6 }} className="overflow-visible">
+      <div className="relative overflow-visible" style={{ background: 'linear-gradient(180deg, #ecfeff 0%, #cffafe 25%, #a5f3fc 55%, #67e8f9 85%, #22d3ee 100%)' }}>
         <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full opacity-30 pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.8) 0%, transparent 70%)' }} />
 
         <div className="relative z-10 max-w-4xl mx-auto px-6 pt-12 pb-16">
@@ -188,6 +188,17 @@ export default function Zone3Descent({ jobs = [], radar, trends = [], targetRole
               Live recommendations calibrated for {targetRole || 'your next role'}. Scroll down to dive into the matched jobs.
             </p>
           </motion.div>
+
+          {isPollingLinkedIn && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-5 flex items-center gap-3 rounded-xl bg-cyan-500/10 border border-cyan-400/20 px-4 py-3"
+            >
+              <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+              <p className="text-sm text-cyan-700">TinyFish is scraping LinkedIn for live jobs — results will update automatically.</p>
+            </motion.div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
             <InsightCard title="Best Roles to Target" icon={Target} delay={0.2}>
@@ -236,9 +247,96 @@ export default function Zone3Descent({ jobs = [], radar, trends = [], targetRole
         <Bubbles />
         <div className="absolute left-1/2 -translate-x-1/2 top-0 bottom-0 w-px pointer-events-none vine-line" style={{ background: 'linear-gradient(180deg, rgba(0,255,213,0.6) 0%, rgba(0,255,213,0.35) 25%, rgba(99,102,241,0.3) 55%, rgba(168,85,247,0.2) 80%, rgba(168,85,247,0.05) 100%)' }} />
 
-        <div className="absolute top-0 left-0 right-0 z-20 overflow-hidden pointer-events-none" style={{ height: 50 }}>
-          <svg viewBox="0 0 1440 50" className="absolute top-0 w-[200%] h-full" preserveAspectRatio="none" style={{ animation: 'wave-drift 7s linear infinite' }}>
-            <path d="M0,16 C120,38 240,2 360,20 C480,38 600,2 720,20 C840,38 960,2 1080,20 C1200,38 1320,2 1440,20 L1440,50 L0,50 Z" fill="#0e7490" />
+        {/* ── BOAT + FISHERMAN ──
+            Wrapper div handles centering (left-1/2 -translate-x-1/2).
+            Inner motion.div handles the gentle float animation.
+            This separation prevents Framer Motion from overriding the centering transform.
+
+            SVG layout (viewBox 0 0 200 120):
+              • Person sits at y=0–58, centered at x=100 (SVG center = page center)
+              • Hull: y=60–120 (top edge = waterline)
+              • Rod tip at x=100, y=14  →  fishing line goes straight down x=100
+              • x=100 = 50% of 200px = page center = central fishing line position
+        */}
+        <div
+          className="absolute left-1/2 -translate-x-1/2 z-30 pointer-events-none"
+          style={{ width: 340, top: -200 }}
+        >
+          <motion.div
+            animate={{ y: [0, -5, 0], rotate: [0, -0.6, 0, 0.6, 0] }}
+            transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            <svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+
+              {/* ── Fishing rod — from hand at x=115 arcing forward to tip at x=100 ── */}
+              <path
+                d="M115 36 Q110 28 105 22 Q102 18 100 14"
+                stroke="#8B7355" strokeWidth="2" strokeLinecap="round" fill="none"
+              />
+              {/* Rod handle behind hand */}
+              <path d="M115 36 Q118 40 120 44" stroke="#8B7355" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+
+              {/* ── Fishing line from rod tip (x=100) straight down ── */}
+              {/* In air — thin dashed */}
+              <line x1="100" y1="14" x2="100" y2="60"
+                stroke="rgba(0,255,213,0.3)" strokeWidth="0.8" strokeDasharray="3 2" />
+              {/* In water — glowing, connects to central line below */}
+              <line x1="100" y1="60" x2="100" y2="120"
+                stroke="rgba(0,255,213,0.55)" strokeWidth="0.8"
+                style={{ filter: 'drop-shadow(0 0 3px rgba(0,255,213,0.5))' }} />
+              {/* Hook at waterline */}
+              <path d="M100 56 L100 64 Q100 68 97 69 Q95 70 95 67"
+                stroke="#00ffd5" strokeWidth="1.2" strokeLinecap="round" fill="none"
+                style={{ filter: 'drop-shadow(0 0 4px rgba(0,255,213,0.6))' }} />
+
+              {/* ── Fisherman — seated on hull, holding rod forward ── */}
+              {/* Head */}
+              <circle cx="112" cy="16" r="8" fill="#FABE91" />
+              {/* Bucket hat */}
+              <ellipse cx="112" cy="11" rx="10" ry="3" fill="#2D7A8A" />
+              <path d="M104 11 Q105 5 112 3 Q119 5 120 11" fill="#2D7A8A" />
+              {/* Body — slight forward lean */}
+              <path d="M105 24 L119 24 L118 48 L106 48 Z" fill="#1A8A9A" />
+              {/* Right arm — extends forward to grip rod */}
+              <path d="M119 32 Q118 38 120 44" stroke="#FABE91" strokeWidth="4" strokeLinecap="round" fill="none" />
+              {/* Left arm — reaches forward toward rod */}
+              <path d="M105 32 Q102 36 100 34" stroke="#FABE91" strokeWidth="4" strokeLinecap="round" fill="none" />
+              {/* Legs — seated, dangling at hull edge */}
+              <path d="M108 48 Q106 54 104 58" stroke="#1E6A7A" strokeWidth="4" strokeLinecap="round" fill="none" />
+              <path d="M116 48 Q118 54 120 58" stroke="#1E6A7A" strokeWidth="4" strokeLinecap="round" fill="none" />
+
+              {/* ── Boat hull — top at y=60 (waterline), bottom at y=120 (SVG bottom) ── */}
+              <path d="M15 60 L32 120 L168 120 L185 60 Z" fill="url(#hullG5)" />
+              <path d="M15 60 L185 60" stroke="rgba(255,255,255,0.12)" strokeWidth="0.8" />
+              <path d="M28 85 L172 85" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+              {/* Portholes */}
+              <circle cx="72" cy="98" r="3.5" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.12)" strokeWidth="0.6" />
+              <circle cx="100" cy="98" r="3.5" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.12)" strokeWidth="0.6" />
+              <circle cx="128" cy="98" r="3.5" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.12)" strokeWidth="0.6" />
+
+              <defs>
+                <linearGradient id="hullG5" x1="15" y1="60" x2="185" y2="120">
+                  <stop offset="0%" stopColor="#0e7490" />
+                  <stop offset="50%" stopColor="#0a5f7a" />
+                  <stop offset="100%" stopColor="#074f68" />
+                </linearGradient>
+              </defs>
+            </svg>
+          </motion.div>
+        </div>
+
+        {/* ── Animated waves at surface — z-20 renders over hull/water seam ── */}
+        <div className="absolute top-[-50px] left-0 right-0 z-20 overflow-hidden pointer-events-none" style={{ height: 50 }}>
+          <svg
+            viewBox="0 0 1440 50"
+            className="absolute w-[200%] h-full"
+            preserveAspectRatio="none"
+            style={{animation: 'wave-drift 7s linear infinite' }}
+          >
+            <path
+              d="M0,16 C120,38 240,2 360,20 C480,38 600,2 720,20 C840,38 960,2 1080,20 C1200,38 1320,2 1440,20 L1440,50 L0,50 Z"
+              fill="#0e7490"
+            />
           </svg>
           <svg viewBox="0 0 1440 50" className="absolute top-0 w-[200%] h-full" preserveAspectRatio="none" style={{ animation: 'wave-drift 11s linear infinite reverse' }}>
             <path d="M0,26 C180,8 360,40 540,24 C720,8 900,40 1080,24 C1260,8 1440,40 1440,24 L1440,50 L0,50 Z" fill="rgba(14,116,144,0.6)" />
