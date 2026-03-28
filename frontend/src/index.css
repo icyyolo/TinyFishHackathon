@@ -1,0 +1,231 @@
+@import "tailwindcss";
+
+/* ── Custom Theme ── */
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --color-reef-50: #ecfeff;
+  --color-reef-100: #cffafe;
+  --color-reef-200: #a5f3fc;
+  --color-reef-300: #67e8f9;
+  --color-reef-400: #22d3ee;
+  --color-reef-500: #06b6d4;
+  --color-reef-600: #0891b2;
+  --color-reef-700: #0e7490;
+  --color-reef-800: #155e75;
+  --color-reef-900: #164e63;
+
+  --color-abyss-50: #f0f4ff;
+  --color-abyss-100: #e0e7ff;
+  --color-abyss-200: #c7d2fe;
+  --color-abyss-300: #a5b4fc;
+  --color-abyss-400: #818cf8;
+  --color-abyss-500: #6366f1;
+  --color-abyss-600: #4f46e5;
+  --color-abyss-700: #4338ca;
+  --color-abyss-800: #3730a3;
+  --color-abyss-900: #1e1b4b;
+
+  --color-biolum: #00ffd5;
+  --color-biolum-dim: #00b89c;
+  --color-biolum-glow: rgba(0, 255, 213, 0.35);
+
+  --color-surface: rgba(255, 255, 255, 0.08);
+  --color-surface-light: rgba(255, 255, 255, 0.65);
+  --color-surface-dark: rgba(0, 20, 40, 0.6);
+}
+
+/* ── Global Reset ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* ── Glassmorphism Utilities ── */
+.glass {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.glass-light {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.06),
+    0 2px 8px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.glass-dark {
+  background: rgba(0, 20, 40, 0.55);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(0, 255, 213, 0.12);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    0 0 20px rgba(0, 255, 213, 0.05);
+}
+
+/* ── Sonar Pulse Keyframes ── */
+@keyframes sonar-ping {
+  0% {
+    transform: scale(0.2);
+    opacity: 0.8;
+  }
+  80% {
+    opacity: 0.15;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes sonar-sweep {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes fade-up {
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+@keyframes wave-drift {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px rgba(0, 255, 213, 0.4));
+    opacity: 0.8;
+  }
+  50% {
+    filter: drop-shadow(0 0 20px rgba(0, 255, 213, 0.8));
+    opacity: 1;
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes vine-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px rgba(0, 255, 213, 0.3));
+  }
+  50% {
+    filter: drop-shadow(0 0 24px rgba(0, 255, 213, 0.7));
+  }
+}
+
+@keyframes bubble-rise {
+  0% {
+    transform: translateY(100%) scale(0.4);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(-100vh) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes progress-fill {
+  0% {
+    stroke-dashoffset: 283;
+  }
+}
+
+/* ── Water Wave CSS ── */
+.wave-container {
+  position: relative;
+  width: 100%;
+  height: 120px;
+  overflow: hidden;
+}
+
+.wave {
+  position: absolute;
+  bottom: 0;
+  width: 200%;
+  height: 100%;
+  animation: wave-drift 8s linear infinite;
+}
+
+.wave:nth-child(2) {
+  animation-duration: 12s;
+  animation-direction: reverse;
+  opacity: 0.5;
+}
+
+.wave:nth-child(3) {
+  animation-duration: 16s;
+  opacity: 0.3;
+}
+
+/* ── Vine Glow ── */
+.vine-line {
+  animation: vine-glow 3s ease-in-out infinite;
+}
+
+/* ── Bubble particles ── */
+.bubble {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(0, 255, 213, 0.3);
+  animation: bubble-rise linear infinite;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 213, 0.2);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 213, 0.4);
+}
+
+/* ── Selection ── */
+::selection {
+  background: rgba(0, 255, 213, 0.25);
+  color: inherit;
+}
