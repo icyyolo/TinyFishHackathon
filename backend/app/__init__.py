@@ -1,4 +1,5 @@
 from flask import Flask
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api import register_blueprints
@@ -10,6 +11,17 @@ from app.services.skill_seed import seed_skill_catalog
 from app.utils.responses import error_response
 
 
+NORMALIZED_JOB_POSTING_COMPAT_COLUMNS = {
+    "description": "TEXT",
+    "posted_at": "DATETIME",
+    "salary_text": "TEXT",
+    "apply_url": "TEXT",
+    "deduplication_key": "VARCHAR(255)",
+    "source_count": "INTEGER DEFAULT 1",
+    "last_ingested_at": "DATETIME",
+}
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
     app.config.from_object(Config())
@@ -19,10 +31,12 @@ def create_app() -> Flask:
         from app.models import (
             ExtractedSkill,
             GeneratedQuestion,
+            JobIngestionRun,
             NormalizedJobPosting,
             NormalizedSkill,
             OnboardingAnswer,
             OnboardingSession,
+            RawJobPosting,
             RoleSkillMapping,
             RoleSkillTrend,
             SkillSynonym,
@@ -33,6 +47,7 @@ def create_app() -> Flask:
         )
 
         db.create_all()
+        ensure_aggregation_schema_compatibility()
         seed_skill_catalog()
         seed_job_catalog()
 
@@ -40,6 +55,24 @@ def create_app() -> Flask:
     register_error_handlers(app)
 
     return app
+
+
+def ensure_aggregation_schema_compatibility() -> None:
+    inspector = inspect(db.engine)
+    tables = set(inspector.get_table_names())
+    if "normalized_job_postings" not in tables:
+        return
+
+    existing_columns = {column["name"] for column in inspector.get_columns("normalized_job_postings")}
+    for column_name, column_type in NORMALIZED_JOB_POSTING_COMPAT_COLUMNS.items():
+        if column_name in existing_columns:
+            continue
+        db.session.execute(
+            text(f"ALTER TABLE normalized_job_postings ADD COLUMN {column_name} {column_type}")
+        )
+    if "source_count" not in existing_columns:
+        db.session.execute(text("UPDATE normalized_job_postings SET source_count = 1 WHERE source_count IS NULL"))
+    db.session.commit()
 
 
 def register_error_handlers(app: Flask) -> None:

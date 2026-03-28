@@ -170,6 +170,30 @@ class RoleSkillTrend(db.Model, SerializerMixin):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
+class JobIngestionRun(db.Model, SerializerMixin):
+    __tablename__ = "job_ingestion_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    connector_type: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+    connector_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_label: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), index=True, nullable=False, default="queued")
+    request_payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    requested_job_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    fetched_job_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    parsed_job_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    normalized_job_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    deduplicated_job_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_job_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    metrics_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    error_summary: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
 class NormalizedJobPosting(db.Model, SerializerMixin):
     __tablename__ = "normalized_job_postings"
 
@@ -181,13 +205,17 @@ class NormalizedJobPosting(db.Model, SerializerMixin):
     company_name: Mapped[str] = mapped_column(String(255), nullable=False)
     company_size: Mapped[str | None] = mapped_column(String(50), nullable=True)
     company_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     locations: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     work_arrangement: Mapped[str] = mapped_column(String(50), nullable=False, default="hybrid")
     job_type: Mapped[str] = mapped_column(String(50), nullable=False, default="full_time")
     industries: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     seniority_level: Mapped[str] = mapped_column(String(50), nullable=False, default="mid")
+    posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True, nullable=True)
     years_experience_min: Mapped[float | None] = mapped_column(Float, nullable=True)
     years_experience_max: Mapped[float | None] = mapped_column(Float, nullable=True)
+    salary_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     salary_min: Mapped[float | None] = mapped_column(Float, nullable=True)
     salary_max: Mapped[float | None] = mapped_column(Float, nullable=True)
     salary_currency: Mapped[str | None] = mapped_column(String(10), nullable=True)
@@ -195,10 +223,36 @@ class NormalizedJobPosting(db.Model, SerializerMixin):
     normalized_skills: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     core_skills: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     preferred_skills: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-    description_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     source: Mapped[str | None] = mapped_column(String(120), nullable=True)
     source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    apply_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    deduplication_key: Mapped[str | None] = mapped_column(String(255), index=True, nullable=True)
+    source_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    last_ingested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     metadata_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class RawJobPosting(db.Model, SerializerMixin):
+    __tablename__ = "raw_job_postings"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    ingestion_run_id: Mapped[str] = mapped_column(String(36), ForeignKey("job_ingestion_runs.id"), index=True, nullable=False)
+    normalized_job_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("normalized_job_postings.id"), index=True, nullable=True)
+    source_connector: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+    source_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_job_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    apply_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    processing_status: Mapped[str] = mapped_column(String(50), index=True, nullable=False, default="queued")
+    parser_version: Mapped[str] = mapped_column(String(50), nullable=False, default="v1")
+    processing_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    deduplication_key: Mapped[str | None] = mapped_column(String(255), index=True, nullable=True)
+    raw_payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    extracted_payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    parse_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 

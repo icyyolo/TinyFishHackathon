@@ -413,3 +413,207 @@ The backend currently seeds a small set of normalized jobs for immediate local t
 - `AI Product Manager`
 
 These are inserted on startup if `normalized_job_postings` is empty.
+
+## Job Aggregation Pipeline
+
+### Aggregation endpoints
+
+- `POST /api/job-aggregation/runs`
+- `GET /api/job-aggregation/metrics`
+- `GET /api/job-aggregation/jobs?limit=20&offset=0&source=<source>&role=<role>`
+- `POST /api/job-aggregation/retry-failed`
+
+### Service architecture
+
+The aggregation module is designed as a generic ingestion pipeline with clear stages:
+
+1. connector layer
+   - `job_aggregation_connectors.py`
+   - fetches raw jobs from a specific source connector
+   - ships with a `manual` connector now and is structured so new connectors can be registered later
+2. normalization and parsing layer
+   - `job_aggregation_service.py`
+   - validates required fields, normalizes enums, parses salary text and posted dates, and canonicalizes skill names
+3. deduplication layer
+   - `job_aggregation_service.py`
+   - computes a stable deduplication key and falls back to similarity matching for same-company same-role jobs
+4. persistence layer
+   - `job_aggregation_repository.py`
+   - stores runs, raw jobs, normalized jobs, processing state, and monitoring metrics
+5. admin API layer
+   - `job_aggregation.py`
+   - exposes metrics, normalized job listing, retry flow, and an admin ingestion trigger
+
+### Database schema
+
+#### `job_ingestion_runs`
+
+Tracks ingestion-level workflow and metrics.
+
+Key fields:
+- `connector_type`, `connector_name`
+- `source_label`, `source_url`
+- `status`
+- `request_payload`
+- `requested_job_count`, `fetched_job_count`, `parsed_job_count`
+- `normalized_job_count`, `deduplicated_job_count`, `failed_job_count`
+- `metrics_json`, `error_summary`
+- `started_at`, `completed_at`
+
+#### `raw_job_postings`
+
+Stores source-native payloads separately from normalized jobs.
+
+Key fields:
+- `ingestion_run_id`
+- `source_connector`, `source_name`, `source_job_id`
+- `source_url`, `apply_url`
+- `processing_status`
+- `processing_attempts`
+- `deduplication_key`
+- `raw_payload`
+- `extracted_payload`
+- `parse_error`
+- `normalized_job_id`
+
+#### `normalized_job_postings`
+
+Canonical jobs used later by job matching and recommendations.
+
+Key normalized fields:
+- `title`
+- `company_name`
+- `description`, `description_summary`
+- `locations`
+- `work_arrangement`
+- `posted_at`
+- `salary_text`
+- `source`
+- `apply_url`
+- `role_key`, `role_name`
+- `job_type`, `industries`, `seniority_level`
+- `normalized_skills`, `core_skills`, `preferred_skills`
+- `deduplication_key`, `source_count`, `last_ingested_at`
+
+### Ingestion workflow
+
+1. Start a run with `POST /api/job-aggregation/runs`.
+2. The selected connector fetches raw jobs.
+3. Each raw job is stored in `raw_job_postings` with status `queued`.
+4. The parser normalizes title, company, locations, work arrangement, salary, seniority, and skills.
+5. The deduplicator checks for an existing canonical job.
+6. If no duplicate exists, a new `normalized_job_postings` row is created.
+7. If a duplicate exists, the canonical job is updated and `source_count` is incremented.
+8. The raw job is marked as `normalized`, `deduplicated`, `failed_parsing`, or `failed_normalization`.
+9. Run-level metrics are finalized in `job_ingestion_runs`.
+
+### Deduplication strategy
+
+The pipeline uses a two-stage approach:
+
+- Stage 1: deterministic deduplication key
+  - built from normalized title, company, primary location, work arrangement, and seniority
+  - hashed so it can be indexed and compared efficiently
+- Stage 2: similarity fallback
+  - limited to jobs from the same company and normalized role
+  - combines title token overlap, skill overlap, and location overlap
+  - merges when similarity is `>= 0.78`
+
+This makes the system resilient to the same job being copied across different sources with small text differences.
+
+### Admin monitoring responses
+
+#### Example: start a manual ingestion run
+
+```bash
+curl -X POST http://127.0.0.1:5000/api/job-aggregation/runs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "connector_type": "manual",
+    "source_label": "demo import",
+    "source_url": "https://example.com/jobs",
+    "jobs": [
+      {
+        "title": "Backend Engineer",
+        "company": "Oceanic Labs",
+        "description": "Build Python APIs, SQL data services, and Docker-based deployments.",
+        "location": "Singapore",
+        "work_arrangement": "hybrid",
+        "posted_date": "2026-03-28",
+        "salary_text": "SGD 80000 - 100000 annual",
+        "apply_url": "https://example.com/jobs/backend-engineer",
+        "skills": ["Python", "SQL", "Docker"],
+        "required_skills": ["Python", "REST API"],
+        "preferred_skills": ["AWS"],
+        "job_type": "full-time",
+        "industries": ["tech"]
+      }
+    ]
+  }'
+```
+
+#### Example: fetch ingestion metrics
+
+```json
+{
+  "message": "OK",
+  "data": {
+    "metrics": {
+      "total_runs": 3,
+      "total_raw_jobs": 42,
+      "total_normalized_jobs": 27,
+      "duplicate_rate_pct": 21.43,
+      "run_status_counts": {
+        "completed": 2,
+        "completed_with_errors": 1
+      },
+      "raw_status_counts": {
+        "normalized": 25,
+        "deduplicated": 9,
+        "failed_parsing": 6,
+        "failed_normalization": 2
+      },
+      "connector_counts": {
+        "manual": 3
+      }
+    }
+  }
+}
+```
+
+#### Example: list ingested jobs
+
+```json
+{
+  "message": "OK",
+  "data": {
+    "total": 27,
+    "limit": 20,
+    "offset": 0,
+    "jobs": [
+      {
+        "id": "job-123",
+        "title": "Backend Engineer",
+        "company_name": "Oceanic Labs",
+        "work_arrangement": "hybrid",
+        "posted_at": "2026-03-28T00:00:00+00:00",
+        "source": "demo import",
+        "apply_url": "https://example.com/jobs/backend-engineer",
+        "raw_job_count": 2,
+        "dedupe_sources": 2
+      }
+    ]
+  }
+}
+```
+
+#### Example: retry failed parsing jobs
+
+```bash
+curl -X POST http://127.0.0.1:5000/api/job-aggregation/retry-failed \
+  -H "Content-Type: application/json" \
+  -d '{
+    "run_id": "<RUN_ID>",
+    "limit": 10
+  }'
+```
