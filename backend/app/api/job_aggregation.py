@@ -4,6 +4,7 @@ from app.schemas.job_aggregation import (
     JobAggregationListJobsQuery,
     JobAggregationMetricsQuery,
     JobAggregationRunPayload,
+    LinkedInTinyFishIngestionPayload,
     RetryFailedJobsPayload,
     validate_payload,
 )
@@ -20,6 +21,14 @@ def start_ingestion_run():
     payload = validate_payload(JobAggregationRunPayload, request.get_json(silent=True) or {})
     result = service.start_ingestion(payload)
     return success_response(result, status=201)
+
+
+@job_aggregation_bp.post("/linkedin/sync")
+def sync_linkedin_jobs():
+    payload = validate_payload(LinkedInTinyFishIngestionPayload, request.get_json(silent=True) or {})
+    result = service.sync_linkedin_jobs(payload)
+    status = 201 if result.get("status") == "completed" else 202
+    return success_response(result, status=status)
 
 
 @job_aggregation_bp.get("/metrics")

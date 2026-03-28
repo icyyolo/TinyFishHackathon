@@ -1,43 +1,36 @@
-import { useState, useRef, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { DOMAINS, ENVIRONMENTS, DEFAULT_SKILLS } from '../data/mockData';
+import { useMemo, useRef, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { DOMAIN_OPTIONS, ENVIRONMENT_OPTIONS, DEFAULT_SKILLS } from '../data/catalog'
 import {
   Layers, ClipboardList, BarChart3, Code2, Palette, TrendingUp, Brain,
-  Home, RefreshCw, Building2, Check, X, Sparkles, ChevronRight,
-} from 'lucide-react';
+  Home, RefreshCw, Building2, Check, X, Sparkles, ChevronRight, Link2,
+} from 'lucide-react'
 
-const DOMAIN_ICONS = { ClipboardList, BarChart3, Code2, Palette, TrendingUp, Brain };
-const ENV_ICONS = { Home, RefreshCw, Building2 };
+const DOMAIN_ICONS = { ClipboardList, BarChart3, Code2, Palette, TrendingUp, Brain }
+const ENV_ICONS = { Home, RefreshCw, Building2 }
 
 const STEPS = [
   { id: 'domain', question: 'What domain are you targeting?', sub: 'Choose the field that excites you most.' },
   { id: 'env', question: 'Where do you want to work?', sub: 'Pick your ideal work environment.' },
-  { id: 'skills', question: 'What are your key skills?', sub: 'Add the skills you bring to the table.' },
-];
+  { id: 'skills', question: 'What are your key skills?', sub: 'Add the skills you bring to the table, and optionally link a LinkedIn jobs search.' },
+]
 
-/* ─── Ocean background decorations ─── */
 function OceanBg() {
   const particles = useMemo(() =>
-    [...Array(30)].map((_, i) => ({
+    [...Array(30)].map(() => ({
       x: Math.random() * 100,
       y: Math.random() * 100,
       size: 2 + Math.random() * 4,
       dur: 4 + Math.random() * 6,
       delay: Math.random() * 4,
     })),
-  []);
+  [])
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden">
-      {/* Light rays from top */}
-      <div className="absolute top-0 left-1/4 w-px h-[60%] opacity-[0.04]"
-        style={{ background: 'linear-gradient(to bottom, white, transparent)' }} />
-      <div className="absolute top-0 left-[45%] w-px h-[50%] opacity-[0.03] rotate-3"
-        style={{ background: 'linear-gradient(to bottom, white, transparent)' }} />
-      <div className="absolute top-0 right-1/3 w-px h-[55%] opacity-[0.03] -rotate-2"
-        style={{ background: 'linear-gradient(to bottom, white, transparent)' }} />
-
-      {/* Floating particles */}
+      <div className="absolute top-0 left-1/4 w-px h-[60%] opacity-[0.04]" style={{ background: 'linear-gradient(to bottom, white, transparent)' }} />
+      <div className="absolute top-0 left-[45%] w-px h-[50%] opacity-[0.03] rotate-3" style={{ background: 'linear-gradient(to bottom, white, transparent)' }} />
+      <div className="absolute top-0 right-1/3 w-px h-[55%] opacity-[0.03] -rotate-2" style={{ background: 'linear-gradient(to bottom, white, transparent)' }} />
       {particles.map((p, i) => (
         <motion.div
           key={i}
@@ -53,8 +46,6 @@ function OceanBg() {
           transition={{ duration: p.dur, delay: p.delay, repeat: Infinity }}
         />
       ))}
-
-      {/* Subtle wave patterns at bottom */}
       <svg className="absolute bottom-0 left-0 w-full h-32 opacity-[0.06]" viewBox="0 0 1440 128" preserveAspectRatio="none">
         <path d="M0,64 C240,100 480,28 720,64 C960,100 1200,28 1440,64 L1440,128 L0,128 Z" fill="white" />
       </svg>
@@ -62,10 +53,9 @@ function OceanBg() {
         <path d="M0,48 C360,80 720,16 1080,48 C1260,64 1380,32 1440,40 L1440,96 L0,96 Z" fill="white" />
       </svg>
     </div>
-  );
+  )
 }
 
-/* ─── Bubble wrapper for each question ─── */
 function BubbleCard({ children }) {
   return (
     <motion.div
@@ -83,7 +73,6 @@ function BubbleCard({ children }) {
           boxShadow: '0 20px 60px rgba(0,0,0,0.15), 0 0 40px rgba(0,255,213,0.03), inset 0 1px 0 rgba(255,255,255,0.1)',
         }}
       >
-        {/* Bubble tail */}
         <div
           className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 rotate-45"
           style={{
@@ -95,10 +84,9 @@ function BubbleCard({ children }) {
         {children}
       </div>
     </motion.div>
-  );
+  )
 }
 
-/* ─── Skill Tag ─── */
 function SkillTag({ skill, onRemove }) {
   return (
     <motion.span
@@ -113,47 +101,54 @@ function SkillTag({ skill, onRemove }) {
         <X className="w-2.5 h-2.5" strokeWidth={2.5} />
       </button>
     </motion.span>
-  );
+  )
 }
 
-/* ─── Main Questionnaire ─── */
 export default function Questionnaire({ onComplete }) {
-  const [step, setStep] = useState(0);
-  const [selectedDomain, setSelectedDomain] = useState(null);
-  const [selectedEnv, setSelectedEnv] = useState(null);
-  const [skills, setSkills] = useState([...DEFAULT_SKILLS]);
-  const [inputValue, setInputValue] = useState('');
-  const inputRef = useRef(null);
+  const [step, setStep] = useState(0)
+  const [selectedDomain, setSelectedDomain] = useState(null)
+  const [selectedEnv, setSelectedEnv] = useState(null)
+  const [skills, setSkills] = useState([...DEFAULT_SKILLS])
+  const [inputValue, setInputValue] = useState('')
+  const [linkedinUrl, setLinkedinUrl] = useState('')
+  const inputRef = useRef(null)
 
-  const progress = ((step + 1) / STEPS.length) * 100;
-
+  const progress = ((step + 1) / STEPS.length) * 100
   const canNext =
     (step === 0 && selectedDomain) ||
     (step === 1 && selectedEnv) ||
-    (step === 2 && skills.length > 0);
+    (step === 2 && skills.length > 0)
 
   const handleNext = () => {
     if (step < 2) {
-      setStep(step + 1);
-    } else {
-      onComplete({ domain: selectedDomain, environment: selectedEnv, skills });
+      setStep(step + 1)
+      return
     }
-  };
+    onComplete({
+      domain: selectedDomain,
+      environment: selectedEnv,
+      skills,
+      linkedinUrl: linkedinUrl.trim() || null,
+    })
+  }
 
   const addSkill = () => {
-    const trimmed = inputValue.trim();
+    const trimmed = inputValue.trim()
     if (trimmed && !skills.includes(trimmed)) {
-      setSkills([...skills, trimmed]);
-      setInputValue('');
+      setSkills([...skills, trimmed])
+      setInputValue('')
     }
-  };
+  }
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); addSkill(); }
-    if (e.key === 'Backspace' && inputValue === '' && skills.length > 0) {
-      setSkills(skills.slice(0, -1));
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      addSkill()
     }
-  };
+    if (e.key === 'Backspace' && inputValue === '' && skills.length > 0) {
+      setSkills(skills.slice(0, -1))
+    }
+  }
 
   return (
     <motion.div
@@ -168,7 +163,6 @@ export default function Questionnaire({ onComplete }) {
     >
       <OceanBg />
 
-      {/* Top bar */}
       <div className="relative z-10 px-6 pt-6 pb-4">
         <div className="flex items-center justify-between max-w-lg mx-auto">
           <div className="flex items-center gap-2">
@@ -181,9 +175,7 @@ export default function Questionnaire({ onComplete }) {
         </div>
       </div>
 
-      {/* Main content */}
       <div className="flex-1 flex flex-col items-center justify-center relative z-10 px-6 pb-32">
-        {/* Question header — pops in for each step */}
         <AnimatePresence mode="wait">
           <motion.div
             key={`header-${step}`}
@@ -200,15 +192,13 @@ export default function Questionnaire({ onComplete }) {
           </motion.div>
         </AnimatePresence>
 
-        {/* Bubble card with content */}
         <AnimatePresence mode="wait">
-          {/* STEP 0: Domain */}
           {step === 0 && (
             <BubbleCard key="domain">
               <div className="grid grid-cols-2 gap-2.5">
-                {DOMAINS.map((d) => {
-                  const Icon = DOMAIN_ICONS[d.iconName];
-                  const selected = selectedDomain === d.id;
+                {DOMAIN_OPTIONS.map((d) => {
+                  const Icon = DOMAIN_ICONS[d.iconName]
+                  const selected = selectedDomain === d.id
                   return (
                     <motion.button
                       key={d.id}
@@ -224,25 +214,23 @@ export default function Questionnaire({ onComplete }) {
                       <Icon className="w-4 h-4 shrink-0" strokeWidth={1.8} />
                       <span className="font-medium text-sm">{d.label}</span>
                       {selected && (
-                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
-                          className="absolute right-2 w-4 h-4 rounded-full bg-cyan-400/20 flex items-center justify-center">
+                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute right-2 w-4 h-4 rounded-full bg-cyan-400/20 flex items-center justify-center">
                           <Check className="w-2.5 h-2.5 text-cyan-300" strokeWidth={3} />
                         </motion.div>
                       )}
                     </motion.button>
-                  );
+                  )
                 })}
               </div>
             </BubbleCard>
           )}
 
-          {/* STEP 1: Environment */}
           {step === 1 && (
             <BubbleCard key="env">
               <div className="grid grid-cols-3 gap-3">
-                {ENVIRONMENTS.map((e) => {
-                  const Icon = ENV_ICONS[e.iconName];
-                  const selected = selectedEnv === e.id;
+                {ENVIRONMENT_OPTIONS.map((e) => {
+                  const Icon = ENV_ICONS[e.iconName]
+                  const selected = selectedEnv === e.id
                   return (
                     <motion.button
                       key={e.id}
@@ -258,22 +246,18 @@ export default function Questionnaire({ onComplete }) {
                       <Icon className="w-6 h-6" strokeWidth={1.8} />
                       <span className="font-medium text-sm">{e.label}</span>
                     </motion.button>
-                  );
+                  )
                 })}
               </div>
             </BubbleCard>
           )}
 
-          {/* STEP 2: Skills */}
           {step === 2 && (
             <BubbleCard key="skills">
-              <div
-                className="flex flex-wrap items-center gap-2 min-h-[52px] p-3 rounded-xl bg-white/5 border border-white/10 focus-within:border-cyan-400/30 focus-within:bg-white/8 transition-all cursor-text"
-                onClick={() => inputRef.current?.focus()}
-              >
+              <div className="flex flex-wrap items-center gap-2 min-h-[52px] p-3 rounded-xl bg-white/5 border border-white/10 focus-within:border-cyan-400/30 focus-within:bg-white/8 transition-all cursor-text" onClick={() => inputRef.current?.focus()}>
                 <AnimatePresence>
                   {skills.map((skill) => (
-                    <SkillTag key={skill} skill={skill} onRemove={(s) => setSkills(skills.filter(sk => sk !== s))} />
+                    <SkillTag key={skill} skill={skill} onRemove={(value) => setSkills(skills.filter((item) => item !== value))} />
                   ))}
                 </AnimatePresence>
                 <input
@@ -287,17 +271,28 @@ export default function Questionnaire({ onComplete }) {
                 />
               </div>
               <p className="mt-2 text-[11px] text-white/20">Press Enter to add, Backspace to remove</p>
+
+              <div className="mt-5 rounded-2xl border border-white/10 bg-black/10 p-4">
+                <div className="flex items-center gap-2 text-cyan-300/90">
+                  <Link2 className="h-4 w-4" strokeWidth={2} />
+                  <span className="text-sm font-semibold">Optional LinkedIn jobs link</span>
+                </div>
+                <p className="mt-2 text-xs text-white/35">
+                  Paste a LinkedIn Jobs search URL if you want the backend to ask TinyFish to import fresh postings before ranking.
+                </p>
+                <input
+                  type="url"
+                  value={linkedinUrl}
+                  onChange={(e) => setLinkedinUrl(e.target.value)}
+                  placeholder="https://www.linkedin.com/jobs/search/?keywords=backend%20engineer"
+                  className="mt-3 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/75 outline-none transition-colors placeholder:text-white/20 focus:border-cyan-400/30 focus:bg-white/8"
+                />
+              </div>
             </BubbleCard>
           )}
         </AnimatePresence>
 
-        {/* Next button */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="mt-8"
-        >
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="mt-8">
           <motion.button
             whileHover={canNext ? { scale: 1.05 } : {}}
             whileTap={canNext ? { scale: 0.96 } : {}}
@@ -332,7 +327,6 @@ export default function Questionnaire({ onComplete }) {
         </motion.div>
       </div>
 
-      {/* ── Progress bar — fixed at bottom ── */}
       <div className="fixed bottom-0 left-0 right-0 z-20">
         <div className="h-1 bg-white/5">
           <motion.div
@@ -345,7 +339,6 @@ export default function Questionnaire({ onComplete }) {
             transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
           />
         </div>
-        {/* Step indicators */}
         <div className="bg-black/20 backdrop-blur-sm px-6 py-3 flex items-center justify-center gap-8">
           {STEPS.map((s, i) => (
             <div key={s.id} className="flex items-center gap-2">
@@ -362,5 +355,5 @@ export default function Questionnaire({ onComplete }) {
         </div>
       </div>
     </motion.div>
-  );
+  )
 }

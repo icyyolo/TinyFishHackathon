@@ -1,4 +1,12 @@
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError as PydanticError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    HttpUrl,
+    ValidationError as PydanticError,
+    field_validator,
+    model_validator,
+)
 
 from app.errors import ValidationError
 
@@ -47,6 +55,28 @@ class JobAggregationRunPayload(BaseModel):
     source_url: HttpUrl | None = None
     jobs: list[RawJobInput] = Field(min_length=1)
     metadata: dict = Field(default_factory=dict)
+
+
+class LinkedInTinyFishIngestionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    linkedin_url: HttpUrl
+    target_role: str = Field(min_length=2, max_length=120)
+    max_jobs: int = Field(default=12, ge=1, le=25)
+    wait_timeout_seconds: int = Field(default=20, ge=5, le=90)
+    poll_interval_seconds: int = Field(default=3, ge=1, le=15)
+    browser_profile: str | None = None
+    proxy_enabled: bool | None = None
+    proxy_country_code: str | None = Field(default=None, min_length=2, max_length=2)
+    goal_override: str | None = Field(default=None, min_length=10, max_length=2000)
+
+    @field_validator("linkedin_url")
+    @classmethod
+    def validate_linkedin_url(cls, value: HttpUrl):
+        host = (value.host or "").lower()
+        if "linkedin.com" not in host:
+            raise ValueError("linkedin_url must point to linkedin.com.")
+        return value
 
 
 class JobAggregationMetricsQuery(BaseModel):
