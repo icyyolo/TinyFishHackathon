@@ -1,0 +1,31 @@
+from app.models.documents import (
+    ExtractedSkill,
+    GeneratedQuestion,
+    NormalizedJobPosting,
+    NormalizedSkill,
+    OnboardingAnswer,
+    OnboardingSession,
+    RoleSkillMapping,
+    RoleSkillTrend,
+    SkillSynonym,
+    TinyFishIngestionRun,
+    User,
+    UserPreference,
+    UserPreferenceHistory,
+)
+
+__all__ = [
+    "ExtractedSkill",
+    "GeneratedQuestion",
+    "NormalizedJobPosting",
+    "NormalizedSkill",
+    "OnboardingAnswer",
+    "OnboardingSession",
+    "RoleSkillMapping",
+    "RoleSkillTrend",
+    "SkillSynonym",
+    "TinyFishIngestionRun",
+    "User",
+    "UserPreference",
+    "UserPreferenceHistory",
+]
